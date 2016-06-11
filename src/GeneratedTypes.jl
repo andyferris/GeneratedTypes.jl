@@ -114,7 +114,7 @@ macro Generated( expr )
                     $field_expr
                 end
             elseif isa(field_expr, Expr)
-                if field_expr.head == :(::)
+                if field_expr.head == :(::) || field_expr.head == :function || (field_expr.head == :(=) && isa(field_expr.args[1], Expr) && field_expr.args[1].head == :call)
                     field_expr = quote
                         $field_expr
                     end
@@ -129,6 +129,7 @@ macro Generated( expr )
             if !isempty(parent_params)
                 GeneratedTypes.replace_symbols!(field_expr, $head_params, parent_params)
             end
+            GeneratedTypes.replace_function_name!(field_expr, $(Expr(:quote, head_typename)), typename) # TODO: only replace symbols which are names of function definitions
             GeneratedTypes.@debug @show field_expr
 
             type_expr = Expr(:type, $mutable, type_defn, field_expr)
@@ -175,6 +176,20 @@ function replace_symbols!(a::Expr, symbols::Vector{Symbol}, exprs)
     end
 end
 
+function replace_function_name!(a::Expr, old_name::Symbol, new_name::Symbol)
+    for i = 1:length(a.args)
+    		if isa(a.args[i], Expr) && (a.args[i].head == :function || a.args[i].head == :(=))
+            if isa(a.args[i].args[1], Expr) && a.args[i].args[1].head == :call
+                fname = a.args[i].args[1].args[1]
+                if isa(fname, Symbol) && fname == old_name
+                    a.args[i].args[1].args[1] = new_name
+                elseif isa(fname, Expr) && fname.head == :curly && fname.args[1] == old_name
+                    a.args[i].args[1].args[1].args[1] = new_name
+                end
+            end
+        end
+    end
+end
 
 # TODO it would be nice to match the types of input x... with the free type parameters, like in typical parameteric types (e.g. Complex(1,1) -> Complex{Int}(1,1) automagically).
 # Its difficult to detect which input types match to which type parameters when you

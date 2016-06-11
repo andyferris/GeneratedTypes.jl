@@ -4,7 +4,7 @@
 
 [![Build Status](https://travis-ci.org/andyferris/GeneratedTypes.jl.svg?branch=master)](https://travis-ci.org/andyferris/GeneratedTypes.jl)
 
-**NOTE:** This package appears to be Julia 0.4 only.
+**NOTE:** This package is currently limited to be Julia 0.4 only (see JuliaLang/julia#16806).
 
 Julia's dynamic-yet-static type system is a careful balance between execution
 speed and programmer convenience. Data can either be strongly-typed, creating
@@ -50,7 +50,8 @@ standard `immutable` and `type` definitions.
 
 ### Implementation
 
-The quickest explanation is the steps taken.
+The quickest explanation is the steps the package takes to register your generated
+type:
 
 1) The @Generated macro takes the type definition and creates an abstract type
 of the same name as given.
@@ -60,8 +61,7 @@ is a @generated function.
 concrete subtype without any remaining type parameters and having a mangled name
 (inserting `#` and the type parameters to the end of the name). This occurs just
 once, during the codegen phase (or if you call the constructor with different
-input, Julia gracefully allows you to `eval` the exact same type definition more
-than once).
+input, it won't attempt to reconstruct the type).
 4) It overloads `Base.show` on the type to hide what is happening, also during
 the codegen phase.
 5) The generated function's action is to call the (inner) constructor of the
@@ -75,10 +75,10 @@ are not explicitly defined).
 
 ### Limitations
 
-Hopefully somewhat obviously, the codegen can only depend on
+Hopefully somewhat obviously, the code generation function can only depend on
 the parameters of the type, and not for instance the type of the input to its
 constructor. If it is not pure (constant in time), you may experience errors
-for redefining a concrete type or other underfined behaviour. If you wish to
+for redefining a concrete type or other undefined behavior. If you wish to
 define your type depending on the input to a constructor, you need to explicitly
 define extra constructors on your abstract type (that call the
 fully-parameterized version).
@@ -89,37 +89,34 @@ Finally, calling `eval` from a generated function appears to be forbidden in Jul
 ### Some *very* simple examples
 
 ```julia
-
+# Same syntax as standard Julia:
 @Generated type SimpleType
 end
 
 @show SimpleType()
 
+# The contained code is the function that returns the body for the type
 @Generated type FieldType
     if 1 < 2
-        quote
-            a::Int
-        end
+        return :(a::Int)
     else
-        quote
-            nothing
-        end
+        return nothing
     end
 end
 
 @show FieldType(1)
 
+# More-or-less a static vector:
 @Generated type MultiType{N, T}
     exprs = [:($(Symbol(string("x_",i))) :: T for i = 1:N]
     Expr(:block, exprs...)
 end
 
 @show MultiType{1, Int}(1)
-
 @show MultiType{3, Float64}(10,11,12)
 
+# Can use subtyping and complicated branching:
 abstract MyAbstract{T,N}
-
 @Generated type Foo{T} <: MyAbstract{T,1}
     if isbits(T)
         quote
@@ -134,4 +131,20 @@ end
 
 @show Foo{Int}([1,2,3])
 @show Foo{ASCIIString}("abc")
+
+# Can also register inner constructors:
+@Generated type R{T}
+    return quote
+        a::T
+        function R(x)
+            if x < 0
+                error("input must be non-negative")
+            else
+                new(x)
+            end
+        end
+    end
+end
+@show R{Int}(1)
+R{Int}(-1)
 ```
