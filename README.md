@@ -73,18 +73,15 @@ new type without knowing the mangled name. Outer constructors can also be
 written for the abstract type (e.g. useful for where some of the type parameters
 are not explicitly defined).
 
-### Current limitations
+### Limitations
 
-The code inserted into the body of the type is an `Expr(:block, ...)`, not a
-function definition like a `@generated` function. Thus `return` is to be
-avoided and natural scoping rules must be utilized to return the desired output.
-
-Also, hopefully somewhat obviously, the codegen can only depend on
+Hopefully somewhat obviously, the codegen can only depend on
 the parameters of the type, and not for instance the type of the input to its
 constructor. If it is not pure (constant in time), you may experience errors
-for redefining a concrete type. If you wish to define your
-type depending on the input to a constructor, you need to explicitly define extra
-constructors on your abstract type (that call the fully-parameterized version).
+for redefining a concrete type or other underfined behaviour. If you wish to
+define your type depending on the input to a constructor, you need to explicitly
+define extra constructors on your abstract type (that call the
+fully-parameterized version).
 
 Finally, calling `eval` from a generated function appears to be forbidden in Julia
 0.5, making the package as it stands inoperable on the latest nightly builds.
