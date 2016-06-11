@@ -67,9 +67,9 @@ macro Generated( expr )
     # The generation code could be `nothing`, a symbol, an expression, or whatever, but it can be `eval`ed to make the expression block and then `eval`ed inside a type definition
     field_expr = expr.args[3]
     @debug println("Field expr: \n $field_expr \n")
+
     # Create a generated function to construct the type when necessary and to deal with the name-mangling
     @debug @show (quote; $(Expr(:call, Expr(:curly, :call, head_params...), Expr(:(::), Expr(:curly, :Type, head_fulltype)), Expr(:(...), :x))); end)
-
 
     f_name = length(head_params) == 0 ? :call : Expr(:curly, :call, head_params...)
 
@@ -85,10 +85,19 @@ macro Generated( expr )
             GeneratedTypes.@debug @show parent_type
 
             # Make a mangled typename for a non-parametric type
-            typename_str = string(parent_type.name.name) * "#"
+            typename_str = string(parent_type.name.name)
             for i = 1:length($(head_fulltype).parameters)
-                typename_str = typename_str * (isa($(head_fulltype).parameters[i], TypeVar) ? string($(head_fulltype).parameters[i].name) : string($(head_fulltype).parameters[i]))  * "#"
+                if i == 1
+                    typename_str = typename_str * "{"
+                end
+                typename_str = typename_str * (isa($(head_fulltype).parameters[i], TypeVar) ? string($(head_fulltype).parameters[i].name) : string($(head_fulltype).parameters[i]))
+                if i == length($(head_fulltype).parameters)
+                    typename_str = typename_str * "}"
+                else
+                    typename_str = typename_str * ","
+                end
             end
+            typename_str = typename_str * "#"
 
             typename = Symbol(typename_str)
             GeneratedTypes.@debug @show typename
@@ -99,6 +108,19 @@ macro Generated( expr )
 
             # Evaluates the field expr
             field_expr = $field_expr
+            if isa(field_expr, Symbol)
+                field_expr = quote
+                    $field_expr
+                end
+            elseif isa(field_expr, Expr)
+                if field_expr.head == :(::)
+                    field_expr = quote
+                        $field_expr
+                    end
+                elseif  field_expr.head != :block
+                    error("Bad generated code for generated type. Recieved $field_expr")
+                end
+            end
             GeneratedTypes.@debug @show field_expr
 
             # The returned quoted expression needs to have the TypeVar symbols replaced by their specefic parameters
@@ -112,12 +134,13 @@ macro Generated( expr )
             GeneratedTypes.@debug @show type_expr
 
             # Check if it's already constructed (rely on name-mangling?)
-            #if !isdefined($my_module, typename)
+            if !isdefined($my_module, typename)
                 eval(type_expr)
-            #else
-            #    error("Somehow, the variable $typename is already defined")
-            #end
-
+            else
+                # Let's assume the type was already constructed
+                # Can happen when calling this constructor with different input
+                # data types but same type parameters
+            end
 
             # Overload Base.show(::Type{typename}) to lie about the name mangling.
             show_expr = quote

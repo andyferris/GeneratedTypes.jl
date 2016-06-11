@@ -79,10 +79,7 @@ The code inserted into the body of the type is an `Expr(:block, ...)`, not a
 function definition like a `@generated` function. Thus `return` is to be
 avoided and natural scoping rules must be utilized to return the desired output.
 
-The output also seems to need to be of the form `Expr(:block, ...)`, which can
-most easily be achieved with the `quote; ...; end` syntax.
-
-And finally, and hopefully somewhat obviously, the codegen can only depend on
+Also, hopefully somewhat obviously, the codegen can only depend on
 the parameters of the type, and not for instance the type of the input to its
 constructor. If it is not pure (constant in time), you may experience errors
 for redefining a concrete type. If you wish to define your
