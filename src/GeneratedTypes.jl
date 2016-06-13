@@ -77,10 +77,8 @@ macro Generated( expr )
 
     constructor_expr = quote
         @generated function $(f_name)(::Type{$(head_fulltype)}, x...)
-            #($(Expr(:(::), Expr(:curly, :Type, head_fulltype))),$(Expr(:(...), :x)))
-            #$(Expr(:call, Expr(:curly, :call, head_params...), Expr(:(::), Expr(:curly, :Type, head_fulltype)), Expr(:(...), :x)))
-#            {$(head_params...}(::Type{$(head_fulltype)}, x...) # Constructor format. Not sure about (::Type{head_fulltype}){parameters}(x...)
-            parent_type = $(head_fulltype)
+            parent_type = $head_fulltype
+            parent_module = $my_module
 
             GeneratedTypes.@debug @show parent_type
 
@@ -90,7 +88,8 @@ macro Generated( expr )
                 if i == 1
                     typename_str = typename_str * "{"
                 end
-                typename_str = typename_str * (isa($(head_fulltype).parameters[i], TypeVar) ? string($(head_fulltype).parameters[i].name) : string($(head_fulltype).parameters[i]))
+                p = $(head_fulltype).parameters[i]
+                typename_str = typename_str * (isa(p, TypeVar) ? string(p.name) : (isa(p, Symbol) ? ":" * string(p) : string(p)))
                 if i == length($(head_fulltype).parameters)
                     typename_str = typename_str * "}"
                 else
@@ -136,8 +135,8 @@ macro Generated( expr )
             GeneratedTypes.@debug @show type_expr
 
             # Check if it's already constructed (rely on name-mangling?)
-            if !isdefined($my_module, typename)
-                eval(type_expr)
+            if !isdefined(parent_module, typename)
+                eval(parent_module, type_expr)
             else
                 # Let's assume the type was already constructed
                 # Can happen when calling this constructor with different input
@@ -149,9 +148,10 @@ macro Generated( expr )
                 Base.show(io::IO, ::Type{$typename}) = show(io, $parent_type);
             end
             GeneratedTypes.@debug @show show_expr
-            eval(current_module(), show_expr)
+            eval(parent_module, show_expr)
 
-            return :( $(typename)(x...) ) # inline?
+            GeneratedTypes.@debug @show :( $parent_module.$(typename)(x...) )
+            return :( $parent_module.$(typename)(x...) ) # inline?
         end
     end
 
