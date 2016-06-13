@@ -107,7 +107,11 @@ macro Generated( expr )
 
             # Evaluates the field expr
             field_expr_gen = () -> $field_expr
-            field_expr = field_expr_gen()
+            try
+                field_expr = field_expr_gen()
+            catch y
+                return :(rethrow($y)) # Will rethrow work here?
+            end
             if isa(field_expr, Symbol)
                 field_expr = quote
                     $field_expr
