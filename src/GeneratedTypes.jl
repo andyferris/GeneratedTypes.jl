@@ -29,16 +29,38 @@ macro Generated( expr )
     elseif isa(head_expr, Expr)
         if head_expr.head == :curly
             head_typename = head_expr.args[1] :: Symbol
-            head_fulltype = head_expr
-            head_params = Symbol[head_expr.args[i] for i = 2:length(head_expr.args)]
+            head_fulltype = copy(head_expr)
+            # Search for <:
+            head_params = Vector{Symbol}(length(head_expr.args) - 1)
+            for i = 2:length(head_expr.args)
+                if isa(head_expr.args[i], Symbol)
+                    head_params[i-1] = head_expr.args[i]
+                elseif isa(head_expr.args[i], Expr) && head_expr.args[i].head == :(<:)
+                    head_params[i-1] = head_expr.args[i].args[1]
+                    head_fulltype.args[i] = head_fulltype.args[i].args[1]
+                else
+                    error("Malformed type name definition: $head_expr")
+                end
+            end
         elseif head_expr.head == :(<:)
             if isa(head_expr.args[1], Symbol)
                 head_typename = head_expr.args[1]
                 head_fulltype = head_typename
             elseif isa(head_expr.args[1], Expr) && head_expr.args[1].head == :curly
                 head_typename = head_expr.args[1].args[1] :: Symbol
-                head_fulltype = head_expr.args[1]
-                head_params = Symbol[head_expr.args[1].args[i] for i = 2:length(head_expr.args[1].args)]
+                head_fulltype = copy(head_expr.args[1])
+                # Search for <:
+                head_params = Vector{Symbol}(length(head_expr.args[1].args) - 1)
+                for i = 2:length(head_expr.args[1].args)
+                    if isa(head_expr.args[1].args[i], Symbol)
+                        head_params[i-1] = head_expr.args[1].args[i]
+                    elseif isa(head_expr.args[1].args[i], Expr) && head_expr.args[1].args[i].head == :(<:)
+                        head_params[i-1] = head_expr.args[1].args[i].args[1]
+                        head_fulltype.args[i] = head_fulltype.args[i].args[1]
+                    else
+                        error("Malformed type name definition: $head_expr")
+                    end
+                end
             else
                 error("Malformed type name definition: $head_expr")
             end

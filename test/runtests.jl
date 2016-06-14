@@ -48,3 +48,13 @@ end
 
 @show Foo{Int}([1,2,3])
 @show Foo{ASCIIString}("abc")
+
+@Generated immutable A{T <: Integer} <: MyAbstract{T,1}
+end
+
+@show A{Int}()
+
+@Generated immutable B{T <: Integer}
+end
+
+@show B{Int}()
