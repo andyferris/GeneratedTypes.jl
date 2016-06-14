@@ -99,92 +99,200 @@ macro Generated( expr )
 
     append_str = DEBUG ? "_" : "#"
 
-    constructor_expr = quote
-        @generated function $(f_name)(::Type{$(head_fulltype)}, x...)
-            parent_type = $head_fulltype
-            parent_module = $my_module
+    constructor_preamble = quote
+        parent_type = $head_fulltype
+        parent_module = $my_module
 
-            GeneratedTypes.@debug @show parent_type
+        GeneratedTypes.@debug @show parent_type
 
-            # Make a mangled typename for a non-parametric type
-            typename_str = string(parent_type.name.name)
-            for i = 1:length($(head_fulltype).parameters)
-                if i == 1
-                    typename_str = typename_str * "{"
-                end
-                p = $(head_fulltype).parameters[i]
-                typename_str = typename_str * (isa(p, TypeVar) ? string(p.name) : (isa(p, Symbol) ? ":" * string(p) : string(p)))
-                if i == length($(head_fulltype).parameters)
-                    typename_str = typename_str * "}"
-                else
-                    typename_str = typename_str * ","
-                end
+        # Make a mangled typename for a non-parametric type
+        typename_str = string(parent_type.name.name)
+        for i = 1:length($(head_fulltype).parameters)
+            if i == 1
+                typename_str = typename_str * "{"
             end
-            typename_str = typename_str * $append_str
-
-            typename = Symbol(typename_str)
-            GeneratedTypes.@debug @show typename
-
-            # Make the full type name definition
-            type_defn = Expr(:(<:), typename, parent_type)
-            GeneratedTypes.@debug @show type_defn
-
-            # Evaluates the field expr
-            field_expr_gen = () -> $field_expr
-            try
-                field_expr = field_expr_gen()
-            catch y
-                return :(rethrow($y)) # Will rethrow work here?
+            p = $(head_fulltype).parameters[i]
+            typename_str = typename_str * (isa(p, TypeVar) ? string(p.name) : (isa(p, Symbol) ? ":" * string(p) : string(p)))
+            if i == length($(head_fulltype).parameters)
+                typename_str = typename_str * "}"
+            else
+                typename_str = typename_str * ","
             end
-            if isa(field_expr, Symbol)
+        end
+        typename_str = typename_str * $append_str
+
+        typename = Symbol(typename_str)
+        GeneratedTypes.@debug @show typename
+
+        # Make the full type name definition
+        type_defn = Expr(:(<:), typename, parent_type)
+        GeneratedTypes.@debug @show type_defn
+
+        # Evaluates the field expr
+        field_expr_gen = () -> $field_expr
+        try
+            field_expr = field_expr_gen()
+        catch y
+            return :(rethrow($y)) # Will rethrow work here?
+        end
+        if isa(field_expr, Symbol)
+            field_expr = quote
+                $field_expr
+            end
+        elseif isa(field_expr, Expr)
+            if field_expr.head == :(::) || field_expr.head == :function || (field_expr.head == :(=) && isa(field_expr.args[1], Expr) && field_expr.args[1].head == :call)
                 field_expr = quote
                     $field_expr
                 end
-            elseif isa(field_expr, Expr)
-                if field_expr.head == :(::) || field_expr.head == :function || (field_expr.head == :(=) && isa(field_expr.args[1], Expr) && field_expr.args[1].head == :call)
-                    field_expr = quote
-                        $field_expr
-                    end
-                elseif  field_expr.head != :block
-                    error("Bad generated code for generated type. Recieved $field_expr")
-                end
+            elseif  field_expr.head != :block
+                error("Bad generated code for generated type. Recieved $field_expr")
             end
-            GeneratedTypes.@debug @show field_expr
-
-            # The returned quoted expression needs to have the TypeVar symbols replaced by their specefic parameters
-            parent_params = parent_type.parameters
-            if !isempty(parent_params)
-                GeneratedTypes.replace_symbols!(field_expr, $head_params, parent_params)
-            end
-            GeneratedTypes.replace_function_name!(field_expr, $(Expr(:quote, head_typename)), typename) # TODO: only replace symbols which are names of function definitions
-            GeneratedTypes.@debug @show field_expr
-
-            type_expr = Expr(:type, $mutable, type_defn, field_expr)
-            GeneratedTypes.@debug @show type_expr
-
-            # Check if it's already constructed (rely on name-mangling?)
-            if !isdefined(parent_module, typename)
-                eval(parent_module, type_expr)
-            else
-                # Let's assume the type was already constructed
-                # Can happen when calling this constructor with different input
-                # data types but same type parameters
-            end
-
-            # Overload Base.show(::Type{typename}) to lie about the name mangling.
-            show_expr = quote
-                Base.show(io::IO, ::Type{$typename}) = show(io, $parent_type);
-            end
-            GeneratedTypes.@debug @show show_expr
-            eval(parent_module, show_expr)
-
-            GeneratedTypes.@debug @show :( $parent_module.$(typename)(x...) )
-            return :( $parent_module.$(typename)(x...) ) # inline?
         end
+        GeneratedTypes.@debug @show field_expr
+
+        # The returned quoted expression needs to have the TypeVar symbols replaced by their specefic parameters
+        parent_params = parent_type.parameters
+        if !isempty(parent_params)
+            GeneratedTypes.replace_symbols!(field_expr, $head_params, parent_params)
+        end
+        GeneratedTypes.replace_function_name!(field_expr, $(Expr(:quote, head_typename)), typename) # TODO: only replace symbols which are names of function definitions
+        GeneratedTypes.@debug @show field_expr
+
+        type_expr = Expr(:type, $mutable, type_defn, field_expr)
+        GeneratedTypes.@debug @show type_expr
+
+        # Check if it's already constructed (rely on name-mangling?)
+        if !isdefined(parent_module, typename)
+            eval(parent_module, type_expr)
+        else
+            # Let's assume the type was already constructed
+            # Can happen when calling this constructor with different input
+            # data types but same type parameters
+        end
+
+        # Overload Base.show(::Type{typename}) to lie about the name mangling.
+        show_expr = quote
+            Base.show(io::IO, ::Type{$typename}) = show(io, $parent_type);
+        end
+        GeneratedTypes.@debug @show show_expr
+        if !(GeneratedTypes.DEBUG)
+            eval(parent_module, show_expr)
+        end
+
+        newtype = eval(:($parent_module.$(typename)))
     end
 
+    constructor_expr = quote
+        @generated function $(f_name)(::Type{$(head_fulltype)}, _x...)
+            $constructor_preamble
+
+            return quote
+                $(Expr(:meta, :inline))
+                $newtype(_x...)
+            end
+        end
+    end
     @debug println("Constructor expr: \n $constructor_expr \n")
     eval(current_module(), constructor_expr)
+
+
+    # The above makes bad code-gen for the constructor, since slurping and
+    # splatting tuples is expensive. Hopefully this will be fixed in Julia soon,
+    # but in v0.4 we need to work around this. Like Tuples, we probably need a
+    # maximum size to make this reasonable.
+    constructor_expr = quote
+        @generated function $(f_name)(::Type{$(head_fulltype)})
+            $constructor_preamble
+
+            return quote
+                $(Expr(:meta, :inline))
+                $newtype()
+            end
+        end
+    end
+    @debug println("Constructor expr: \n $constructor_expr \n")
+    eval(current_module(), constructor_expr)
+
+    constructor_expr = quote
+        @generated function $(f_name)(::Type{$(head_fulltype)}, _x_1)
+            $constructor_preamble
+
+            return quote
+                $(Expr(:meta, :inline))
+                $newtype(_x_1)
+            end
+        end
+    end
+    @debug println("Constructor expr: \n $constructor_expr \n")
+    eval(current_module(), constructor_expr)
+
+    constructor_expr = quote
+        @generated function $(f_name)(::Type{$(head_fulltype)}, _x_1, _x_2)
+            $constructor_preamble
+
+            return quote
+                $(Expr(:meta, :inline))
+                $newtype(_x_1, _x_2)
+            end
+        end
+    end
+    @debug println("Constructor expr: \n $constructor_expr \n")
+    eval(current_module(), constructor_expr)
+
+    constructor_expr = quote
+        @generated function $(f_name)(::Type{$(head_fulltype)}, _x_1, _x_2, _x_3)
+            $constructor_preamble
+
+            return quote
+                $(Expr(:meta, :inline))
+                $newtype(_x_1, _x_2, _x_3)
+            end
+        end
+    end
+    @debug println("Constructor expr: \n $constructor_expr \n")
+    eval(current_module(), constructor_expr)
+
+    constructor_expr = quote
+        @generated function $(f_name)(::Type{$(head_fulltype)}, _x_1, _x_2, _x_3, _x_4)
+            $constructor_preamble
+
+            return quote
+                $(Expr(:meta, :inline))
+                $newtype(_x_1, _x_2, _x_3, _x_4)
+            end
+        end
+    end
+    @debug println("Constructor expr: \n $constructor_expr \n")
+    eval(current_module(), constructor_expr)
+
+
+    #=
+    input_min = 0
+    input_max = 16
+    for i = input_min:input_max
+        sig = [Symbol("_x_$j") for j = 1:i]
+        new_expr = Expr(:call, :newtype, sig...)
+        constructor_expr = Expr(:stagedfunction, Expr(:call, f_name, :(::Type{$(head_fulltype)}), sig...), Expr(:block,
+                constructor_preamble,
+                #:(sig = [Symbol("_x_$j") for j = 1:$i]),
+                #:(println(Expr(:block, Expr(:meta, :inline), Expr(:call, Expr(:$, :newtype), $sig...)))),
+                :(return $(Expr(:block, Expr(:meta, :inline), Expr(:call, :newtype, sig...))))))
+
+
+
+        #=constructor_expr = quote
+            @generated $call_expr
+                $constructor_preamble
+
+                return quote
+                    $(Expr(:meta, :inline))
+                    $new_expr
+                end
+            end
+        end=#
+        @debug println("Constructor expr: \n $constructor_expr \n")
+        eval(current_module(), constructor_expr)
+    end=#
 end
 
 function replace_symbols!(a::Expr, symbols::Vector{Symbol}, exprs)
