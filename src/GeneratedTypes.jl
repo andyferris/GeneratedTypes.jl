@@ -2,12 +2,14 @@ module GeneratedTypes
 
 export @Generated
 
-#macro debug(x)
-#    esc(x)
-#end
+DEBUG = false
 
 macro debug(x)
-    nothing
+    if DEBUG
+        return esc(x)
+    else
+        return nothing
+    end
 end
 
 macro Generated( expr )
@@ -73,7 +75,7 @@ macro Generated( expr )
 
     f_name = length(head_params) == 0 ? :call : Expr(:curly, :call, head_params...)
 
-    # Now we need to replace the need to replace
+    append_str = DEBUG ? "_" : "#"
 
     constructor_expr = quote
         @generated function $(f_name)(::Type{$(head_fulltype)}, x...)
@@ -96,7 +98,7 @@ macro Generated( expr )
                     typename_str = typename_str * ","
                 end
             end
-            typename_str = typename_str * "#"
+            typename_str = typename_str * $append_str
 
             typename = Symbol(typename_str)
             GeneratedTypes.@debug @show typename
@@ -180,6 +182,8 @@ function replace_symbols!(a::Expr, symbols::Vector{Symbol}, exprs)
     end
 end
 
+replace_symbols!(a::Void, symbols::Vector{Symbol}, exprs) = nothing
+
 function replace_function_name!(a::Expr, old_name::Symbol, new_name::Symbol)
     for i = 1:length(a.args)
     		if isa(a.args[i], Expr) && (a.args[i].head == :function || a.args[i].head == :(=))
@@ -194,6 +198,8 @@ function replace_function_name!(a::Expr, old_name::Symbol, new_name::Symbol)
         end
     end
 end
+
+replace_function_name!(a::Void, old_name::Symbol, new_name::Symbol) = nothing
 
 # TODO it would be nice to match the types of input x... with the free type parameters, like in typical parameteric types (e.g. Complex(1,1) -> Complex{Int}(1,1) automagically).
 # Its difficult to detect which input types match to which type parameters when you

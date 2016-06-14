@@ -34,11 +34,18 @@ example, take:
 end
 ```
 
-This creates what is more-or-less a static vector of length `N` and type `T`:
+This creates what is more-or-less a static vector of length `N` and type `T` with
+field names `x_1`, `x_2`, etc:
 
 ```julia
-julia> MultiType{3,Float64}(1,2,3)
+julia> m = MultiType{3,Float64}(1,2,3)
 MultiType{3,Float64}(1.0,2.0,3.0)
+
+julia> fieldnames(m)
+3-element Array{Symbol,1}:
+ :x_1
+ :x_2
+ :x_3
 
 julia> m.x_2
 2.0
@@ -108,7 +115,7 @@ end
 
 # More-or-less a static vector:
 @Generated type MultiType{N, T}
-    exprs = [:($(Symbol(string("x_",i))) :: T for i = 1:N]
+    exprs = [:($(Symbol(string("x_",i))) :: T) for i = 1:N]
     Expr(:block, exprs...)
 end
 
