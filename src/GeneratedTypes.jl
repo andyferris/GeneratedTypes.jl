@@ -12,7 +12,22 @@ macro debug(x)
     end
 end
 
-macro Generated( expr )
+macro Generated( expr_in... )
+
+    if length(expr_in) == 1
+        signature_lengths = 0:8
+        expr = expr_in[1]
+    elseif length(expr_in) == 2
+        signature_lengths = expr_in[1]
+        if isa(signature_lengths, Expr) || isa(signature_lengths, Symbol)
+            signature_lengths = eval(current_module(), signature_lengths)
+        end
+        expr = expr_in[2]
+    else
+        return(:(error("@Generated accepts either 1 or 2 arguments")))
+    end
+    @debug println("Signature lengthsL $signature_lengths")
+
     if expr.head != :type || !isa(expr.args[1], Bool)
         error("invalid syntrax: @Generated must be used with a type definition")
     end
@@ -195,104 +210,22 @@ macro Generated( expr )
     @debug println("Constructor expr: \n $constructor_expr \n")
     eval(current_module(), constructor_expr)
 
-
     # The above makes bad code-gen for the constructor, since slurping and
     # splatting tuples is expensive. Hopefully this will be fixed in Julia soon,
-    # but in v0.4 we need to work around this. Like Tuples, we probably need a
-    # maximum size to make this reasonable.
-    constructor_expr = quote
-        @generated function $(f_name)(::Type{$(head_fulltype)})
-            $constructor_preamble
+    # but in v0.4.5 we need to work around this. We need a maximum size to make
+    # this reasonable, but the user can provide this as a first argument
 
-            return quote
-                $(Expr(:meta, :inline))
-                $newtype()
-            end
-        end
-    end
-    @debug println("Constructor expr: \n $constructor_expr \n")
-    eval(current_module(), constructor_expr)
-
-    constructor_expr = quote
-        @generated function $(f_name)(::Type{$(head_fulltype)}, _x_1)
-            $constructor_preamble
-
-            return quote
-                $(Expr(:meta, :inline))
-                $newtype(_x_1)
-            end
-        end
-    end
-    @debug println("Constructor expr: \n $constructor_expr \n")
-    eval(current_module(), constructor_expr)
-
-    constructor_expr = quote
-        @generated function $(f_name)(::Type{$(head_fulltype)}, _x_1, _x_2)
-            $constructor_preamble
-
-            return quote
-                $(Expr(:meta, :inline))
-                $newtype(_x_1, _x_2)
-            end
-        end
-    end
-    @debug println("Constructor expr: \n $constructor_expr \n")
-    eval(current_module(), constructor_expr)
-
-    constructor_expr = quote
-        @generated function $(f_name)(::Type{$(head_fulltype)}, _x_1, _x_2, _x_3)
-            $constructor_preamble
-
-            return quote
-                $(Expr(:meta, :inline))
-                $newtype(_x_1, _x_2, _x_3)
-            end
-        end
-    end
-    @debug println("Constructor expr: \n $constructor_expr \n")
-    eval(current_module(), constructor_expr)
-
-    constructor_expr = quote
-        @generated function $(f_name)(::Type{$(head_fulltype)}, _x_1, _x_2, _x_3, _x_4)
-            $constructor_preamble
-
-            return quote
-                $(Expr(:meta, :inline))
-                $newtype(_x_1, _x_2, _x_3, _x_4)
-            end
-        end
-    end
-    @debug println("Constructor expr: \n $constructor_expr \n")
-    eval(current_module(), constructor_expr)
-
-
-    #=
-    input_min = 0
-    input_max = 16
-    for i = input_min:input_max
+    #signature_lengths = 0:8
+    for i in signature_lengths
         sig = [Symbol("_x_$j") for j = 1:i]
-        new_expr = Expr(:call, :newtype, sig...)
+        new_expr = Expr(:call, Expr(:($), :newtype), sig...)
         constructor_expr = Expr(:stagedfunction, Expr(:call, f_name, :(::Type{$(head_fulltype)}), sig...), Expr(:block,
-                constructor_preamble,
-                #:(sig = [Symbol("_x_$j") for j = 1:$i]),
-                #:(println(Expr(:block, Expr(:meta, :inline), Expr(:call, Expr(:$, :newtype), $sig...)))),
-                :(return $(Expr(:block, Expr(:meta, :inline), Expr(:call, :newtype, sig...))))))
+                constructor_preamble.args[2:end]..., # expand out that quoteblock
+                Expr(:return, Expr(:quote, Expr(:block, Expr(:meta, :inline), Expr(:call, Expr(:$,:newtype), sig...))))))
 
-
-
-        #=constructor_expr = quote
-            @generated $call_expr
-                $constructor_preamble
-
-                return quote
-                    $(Expr(:meta, :inline))
-                    $new_expr
-                end
-            end
-        end=#
         @debug println("Constructor expr: \n $constructor_expr \n")
         eval(current_module(), constructor_expr)
-    end=#
+    end
 end
 
 function replace_symbols!(a::Expr, symbols::Vector{Symbol}, exprs)
