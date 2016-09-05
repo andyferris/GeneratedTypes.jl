@@ -22,7 +22,7 @@ definition where the fields names, number and type may be fully-dependent on
 the parameters of a type.
 
 This is where `@Generated` types come in. Much like, `@generated` functions,
-`@Generated` types allow one to generated code to specify the type definition
+`@Generated` types allow one to generate code to specify the type definition
 depending on the input. In this case, the input is not the types of the arguments
 to the constructor, but rather is the parameters of the type itself. As a simple
 example, take:
